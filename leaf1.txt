@@ -1,0 +1,351 @@
+! Based on:
+! https://www.packetcoders.io/how-to-build-a-nxos-9000v-based-evpn-vxlan-fabric/
+! https://chasewright.com/vxlan-evpn-multisite-setup-part-1/ and subsequent parts
+! https://www.cisco.com/c/dam/en/us/td/docs/switches/datacenter/nexus9000/sw/vxlan_evpn/VXLAN_EVPN.pdf
+! http://blog.reissromoli.com/search/label/EVPN
+! Some ideas from:
+! https://netcraftsmen.com/vpc-best-practices-checklist/
+! I don't think it's that much useful but anyway:
+! https://www.cisco.com/c/en/us/support/docs/multiprotocol-label-switching-mpls/mpls/215722-configure-and-verify-in-evpn-vxlan-multi.html
+
+!Command: show running-config
+!Running configuration last done at: Wed Jan 26 08:56:23 2022
+!Time: Wed Jan 26 10:26:00 2022
+
+version 9.3(8) Bios:version 07.69 
+switchname leaf1
+! This part is automagically present: I don't know if those limits are reasonable
+vdc leaf1 id 1
+  limit-resource vlan minimum 16 maximum 4094
+  limit-resource vrf minimum 2 maximum 4096
+  limit-resource port-channel minimum 0 maximum 256
+  limit-resource u4route-mem minimum 248 maximum 248
+  limit-resource u6route-mem minimum 96 maximum 96
+  limit-resource m4route-mem minimum 58 maximum 58
+  limit-resource m6route-mem minimum 8 maximum 8
+
+! All those features are necessary, the ones in doubt are pointed out.
+feature nxapi
+! Is it needed??
+cfs eth distribute
+nv overlay evpn
+feature ospf
+feature bgp
+feature pim
+! Is it needed??
+feature fabric forwarding
+feature interface-vlan
+feature vn-segment-vlan-based
+feature lacp
+feature vpc
+feature lldp
+! Could do without :)
+feature vtp
+feature nv overlay
+
+clock timezone ROME 1 0
+clock summer-time ROME 5 Sun Mar 02:00 5 Sun Oct 03:00 60
+
+username admin password 5 $5$XXXXXXX$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  role network-admin
+ssh key rsa 2048 
+
+! Cosmetic
+ip domain-lookup
+ip host leaf1 10.254.0.64
+ip host leaf2 10.254.0.65
+ip host leaf3 10.254.0.66
+ip host spine1 10.254.0.1
+ip host spine2 10.254.0.2
+
+! errdisable recovery cause all
+errdisable recovery cause link-flap
+errdisable recovery cause udld
+errdisable recovery cause bpduguard
+errdisable recovery cause loopback
+errdisable recovery cause storm-control
+errdisable recovery cause security-violation
+errdisable recovery cause psecure-violation
+errdisable recovery cause vpc-peerlink
+errdisable recovery cause failed-port-state
+errdisable recovery cause dcbx-no-ack
+
+! A bit of security
+system default switchport shutdown
+
+! Mystery
+copp profile strict
+
+snmp-server user admin network-admin auth md5 XXXXXXXXXXXXXXXXXXXX priv XXXXXXXXXXXXXXXXXXXXXX localizedV2key
+rmon event 1 log trap public description FATAL(1) owner PMON@FATAL
+rmon event 2 log trap public description CRITICAL(2) owner PMON@CRITICAL
+rmon event 3 log trap public description ERROR(3) owner PMON@ERROR
+rmon event 4 log trap public description WARNING(4) owner PMON@WARNING
+rmon event 5 log trap public description INFORMATION(5) owner PMON@INFO
+snmp-server community public group network-operator
+ntp server 195.32.69.253 use-vrf management
+ntp server 195.32.69.254 use-vrf management
+ntp source-interface mgmt0
+
+! Is it correct to point the rp-address to both spines?
+ip pim rp-address 10.254.0.1 group-list 224.0.0.0/4
+ip pim rp-address 10.254.0.2 group-list 224.0.0.0/4
+ip pim ssm range 232.0.0.0/8
+
+vlan 1,82,250,682
+vlan 82
+  vn-segment 50082
+vlan 250
+  vn-segment 50250
+vlan 682
+  vn-segment 50682
+
+vrf context management
+  ip route 0.0.0.0/0 192.168.250.254
+
+! I create a VRF only for vPC
+vrf context vpc
+
+vpc domain 99
+  ! Seems a good thing: am I right?
+  ! https://www.cisco.com/c/en/us/support/docs/routers/7000-series-routers/116140-config-nexus-peer-00.html
+  peer-switch
+  peer-keepalive destination 172.19.19.2 source 172.19.19.1 vrf vpc
+  auto-recovery
+  ! From best practice linked on top
+  ip arp synchronize
+
+nxapi use-vrf management
+
+interface Vlan1
+
+! Pretty standard things here on...
+
+interface port-channel50
+  switchport access vlan 682
+  spanning-tree port type edge
+  vpc 50
+
+interface port-channel4095
+  description keepalive
+  no switchport
+  vrf member vpc
+  ip address 172.19.19.1/30
+
+interface port-channel4096
+  description Peer-link
+  switchport mode trunk
+  spanning-tree port type network
+  vpc peer-link
+
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface loopback2
+  ! Multicast groups mapping explained here:
+  ! https://community.cisco.com/t5/server-networking/vxlan-vni-to-multicast-group-mapping/m-p/3213192/highlight/true#M12166
+  member vni 50082
+    mcast-group 239.0.0.82
+  member vni 50250
+    mcast-group 239.0.0.250
+  member vni 50682
+    mcast-group 239.0.6.82
+
+interface Ethernet1/1
+  switchport mode trunk
+  switchport trunk allowed vlan 82,250,682
+  no shutdown
+
+interface Ethernet1/2
+
+interface Ethernet1/3
+
+interface Ethernet1/4
+
+interface Ethernet1/5
+
+interface Ethernet1/6
+
+interface Ethernet1/7
+
+interface Ethernet1/8
+
+interface Ethernet1/9
+
+interface Ethernet1/10
+
+interface Ethernet1/11
+
+interface Ethernet1/12
+
+interface Ethernet1/13
+
+interface Ethernet1/14
+
+interface Ethernet1/15
+
+interface Ethernet1/16
+
+interface Ethernet1/17
+
+interface Ethernet1/18
+
+interface Ethernet1/19
+
+interface Ethernet1/20
+
+interface Ethernet1/21
+
+interface Ethernet1/22
+
+interface Ethernet1/23
+
+interface Ethernet1/24
+
+interface Ethernet1/25
+  switchport access vlan 682
+  channel-group 50 mode active
+  no shutdown
+
+interface Ethernet1/26
+
+interface Ethernet1/27
+
+interface Ethernet1/28
+
+interface Ethernet1/29
+
+interface Ethernet1/30
+
+interface Ethernet1/31
+
+interface Ethernet1/32
+
+interface Ethernet1/33
+
+interface Ethernet1/34
+
+interface Ethernet1/35
+
+interface Ethernet1/36
+
+interface Ethernet1/37
+
+interface Ethernet1/38
+
+interface Ethernet1/39
+
+interface Ethernet1/40
+
+interface Ethernet1/41
+
+interface Ethernet1/42
+
+interface Ethernet1/43
+
+interface Ethernet1/44
+
+interface Ethernet1/45
+  no switchport
+  channel-group 4095 mode active
+  no shutdown
+
+interface Ethernet1/46
+  no switchport
+  channel-group 4095 mode active
+  no shutdown
+
+interface Ethernet1/47
+  switchport mode trunk
+  channel-group 4096 mode active
+  no shutdown
+
+interface Ethernet1/48
+  switchport mode trunk
+  channel-group 4096 mode active
+  no shutdown
+
+interface Ethernet1/49
+
+interface Ethernet1/50
+
+interface Ethernet1/51
+
+interface Ethernet1/52
+
+! MTU should be: 1574... 1600 will do :)
+! Ref: https://oswalt.dev/2014/03/mtu-considerations-for-vxlan/
+interface Ethernet1/53
+  description Link Spine1
+  no switchport
+  mtu 1600
+  ip address 10.254.1.2/30
+  ip ospf network point-to-point
+  ip router ospf UNDERLAY area 0.0.0.0
+  ip pim sparse-mode
+  no shutdown
+
+interface Ethernet1/54
+  description Link Spine2
+  no switchport
+  mtu 1600
+  ip address 10.254.1.6/30
+  ip ospf network point-to-point
+  ip router ospf UNDERLAY area 0.0.0.0
+  ip pim sparse-mode
+  no shutdown
+
+interface mgmt0
+  vrf member management
+  ip address 192.168.250.28/24
+
+interface loopback1
+  description RID Loopback
+  ip address 10.254.0.64/32
+  ip router ospf UNDERLAY area 0.0.0.0
+
+interface loopback2
+  description VTEP Loopback
+  ip address 10.254.0.129/32
+  ! Secondary necessary. Info here: https://www.linkedin.com/pulse/vxlan-vpc-anycast-dmitry-golovach
+  ! Extensive info but I'm not understanding most or nothing here: https://www.ciscolive.com/c/dam/r/ciscolive/emea/docs/2020/pdf/BRKDCN-2249.pdf
+  ip address 10.254.254.1/32 secondary
+  ip router ospf UNDERLAY area 0.0.0.0
+  ip pim sparse-mode
+icam monitor scale
+
+line console
+line vty
+boot nxos bootflash:/nxos.9.3.8.bin 
+router ospf UNDERLAY
+  router-id 10.254.0.64
+  name-lookup
+router bgp 65001
+  address-family l2vpn evpn
+  template peer SPINE-RR
+    remote-as 65001
+    update-source loopback1
+    address-family l2vpn evpn
+      send-community extended
+  neighbor 10.254.0.1
+    inherit peer SPINE-RR
+    description *** SESSIONE CON SPINE1 (RR) ***
+  neighbor 10.254.0.2
+    inherit peer SPINE-RR
+    description *** SESSIONE CON SP-2 (RR) ***
+evpn
+  vni 50082 l2
+    rd auto
+    route-target import auto
+    route-target export auto
+  vni 50250 l2
+    rd auto
+    route-target import auto
+    route-target export auto
+  vni 50682 l2
+    rd auto
+    route-target import auto
+    route-target export auto
+
+
+
+leaf1#    

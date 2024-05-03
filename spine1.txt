@@ -1,0 +1,243 @@
+! Based on:
+! https://www.packetcoders.io/how-to-build-a-nxos-9000v-based-evpn-vxlan-fabric/
+! https://chasewright.com/vxlan-evpn-multisite-setup-part-1/ and subsequent parts
+! https://www.cisco.com/c/dam/en/us/td/docs/switches/datacenter/nexus9000/sw/vxlan_evpn/VXLAN_EVPN.pdf
+! http://blog.reissromoli.com/search/label/EVPN
+! I don't think it's that much useful but anyway:
+! https://www.cisco.com/c/en/us/support/docs/multiprotocol-label-switching-mpls/mpls/215722-configure-and-verify-in-evpn-vxlan-multi.html
+
+!Command: show running-config
+!No configuration change since last restart
+!Time: Wed Jan 26 10:26:49 2022
+
+version 9.3(8) Bios:version 07.69 
+switchname spine1
+! This part is automagically present: I don't know if those limits are reasonable
+vdc spine1 id 1
+  limit-resource vlan minimum 16 maximum 4094
+  limit-resource vrf minimum 2 maximum 4096
+  limit-resource port-channel minimum 0 maximum 256
+  limit-resource u4route-mem minimum 248 maximum 248
+  limit-resource u6route-mem minimum 96 maximum 96
+  limit-resource m4route-mem minimum 58 maximum 58
+  limit-resource m6route-mem minimum 8 maximum 8
+
+! All those features are necessary, the ones in doubt are pointed out.
+nv overlay evpn
+feature ospf
+feature bgp
+feature pim
+! Maybe not needed in my case.
+feature interface-vlan
+feature lldp
+! Could do without :)
+feature vtp
+
+clock timezone ROME 1 0
+clock summer-time ROME 5 Sun Mar 02:00 5 Sun Oct 03:00 60
+
+username admin password 5 $5$XXXXXXX$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  role network-admin
+ssh key rsa 2048 
+
+! Cosmetic.
+ip domain-lookup
+ip host spine1 10.254.0.1
+ip host leaf1 10.254.0.64
+ip host leaf2 10.254.0.65
+ip host leaf3 10.254.0.66
+ip host spine2 10.254.0.2
+
+! errdisable recovery cause all
+errdisable recovery cause link-flap
+errdisable recovery cause udld
+errdisable recovery cause bpduguard
+errdisable recovery cause loopback
+errdisable recovery cause storm-control
+errdisable recovery cause security-violation
+errdisable recovery cause psecure-violation
+errdisable recovery cause vpc-peerlink
+errdisable recovery cause failed-port-state
+errdisable recovery cause dcbx-no-ack
+
+! A bit of security
+system default switchport shutdown
+
+  
+! Mystery
+copp profile strict
+
+rmon event 1 log trap public description FATAL(1) owner PMON@FATAL
+rmon event 2 log trap public description CRITICAL(2) owner PMON@CRITICAL
+rmon event 3 log trap public description ERROR(3) owner PMON@ERROR
+rmon event 4 log trap public description WARNING(4) owner PMON@WARNING
+rmon event 5 log trap public description INFORMATION(5) owner PMON@INFO
+snmp-server community public group network-operator
+ntp server 195.32.69.253 use-vrf management
+ntp server 195.32.69.254 use-vrf management
+ntp source-interface mgmt0
+
+! IMPORTANT: do I need to add both spines??? I think I do: todo failover testing
+ip pim rp-address 10.254.0.1 group-list 224.0.0.0/4
+ip pim ssm range 232.0.0.0/8
+vlan 1
+
+vrf context management
+  ip route 0.0.0.0/0 192.168.250.254
+
+interface Vlan1
+
+! MTU should be: 1574... 1600 will do :)
+! Ref: https://oswalt.dev/2014/03/mtu-considerations-for-vxlan/
+
+interface Ethernet1/1
+  description Link Leaf1
+  mtu 1600
+  ip address 10.254.1.1/30
+  ip ospf network point-to-point
+  ip router ospf UNDERLAY area 0.0.0.0
+  ip pim sparse-mode
+  no shutdown
+
+interface Ethernet1/2
+  description Link Leaf2
+  mtu 1600
+  ip address 10.254.1.9/30
+  ip ospf network point-to-point
+  ip router ospf UNDERLAY area 0.0.0.0
+  ip pim sparse-mode
+  no shutdown
+
+interface Ethernet1/3
+  description Link Leaf3
+  mtu 1600
+  ip address 10.254.1.17/30
+  ip ospf network point-to-point
+  ip router ospf UNDERLAY area 0.0.0.0
+  ip pim sparse-mode
+  no shutdown
+
+interface Ethernet1/4
+  no shutdown
+
+interface Ethernet1/5
+  no shutdown
+
+interface Ethernet1/6
+  no shutdown
+
+interface Ethernet1/7
+  no shutdown
+
+interface Ethernet1/8
+  no shutdown
+
+interface Ethernet1/9
+  no shutdown
+
+interface Ethernet1/10
+  no shutdown
+
+interface Ethernet1/11
+  no shutdown
+
+interface Ethernet1/12
+  no shutdown
+
+interface Ethernet1/13
+  no shutdown
+
+interface Ethernet1/14
+  no shutdown
+
+interface Ethernet1/15
+  no shutdown
+
+interface Ethernet1/16
+  no shutdown
+
+interface Ethernet1/17
+  no shutdown
+
+interface Ethernet1/18
+  no shutdown
+
+interface Ethernet1/19
+  no shutdown
+
+interface Ethernet1/20
+  no shutdown
+
+interface Ethernet1/21
+  no shutdown
+
+interface Ethernet1/22
+  no shutdown
+
+interface Ethernet1/23
+  no shutdown
+
+interface Ethernet1/24
+  no shutdown
+
+interface Ethernet1/25
+  no shutdown
+
+interface Ethernet1/26
+  no shutdown
+
+interface Ethernet1/27
+  no shutdown
+
+interface Ethernet1/28
+  no shutdown
+
+interface Ethernet1/29
+  no shutdown
+
+interface Ethernet1/30
+  no shutdown
+
+interface Ethernet1/31
+  no shutdown
+
+interface Ethernet1/32
+  no shutdown
+
+interface mgmt0
+  vrf member management
+  ip address 192.168.250.27/24
+
+interface loopback1
+  description RID Loopback
+  ip address 10.254.0.1/32
+  ip router ospf UNDERLAY area 0.0.0.0
+  ip pim sparse-mode
+line console
+line vty
+boot nxos bootflash:/nxos.9.3.8.bin 
+
+! Pretty clear, isn't it?
+router ospf UNDERLAY
+  router-id 10.254.0.1
+  name-lookup
+router bgp 65001
+  router-id 10.254.0.1
+  address-family l2vpn evpn
+  template peer RR-CLIENT
+    remote-as 65001
+    update-source loopback1
+    address-family l2vpn evpn
+      send-community extended
+      route-reflector-client
+  neighbor 10.254.0.64
+    inherit peer RR-CLIENT
+    description *** Leaf1 ***
+  neighbor 10.254.0.65
+    inherit peer RR-CLIENT
+    description *** Leaf2 ***
+  neighbor 10.254.0.66
+    inherit peer RR-CLIENT
+    description *** Leaf-3 ***
+
+
+spine1#  
