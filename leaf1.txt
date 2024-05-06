@@ -308,6 +308,7 @@ interface loopback2
   ip address 10.254.0.129/32
   ! Secondary necessary. Info here: https://www.linkedin.com/pulse/vxlan-vpc-anycast-dmitry-golovach
   ! Extensive info but I'm not understanding most or nothing here: https://www.ciscolive.com/c/dam/r/ciscolive/emea/docs/2020/pdf/BRKDCN-2249.pdf
+  ! Daniel has an article too! https://lostintransit.se/2024/04/29/cisco-vpc-in-vxlan-evpn-network-part-1-anycast-vtep/
   ip address 10.254.254.1/32 secondary
   ip router ospf UNDERLAY area 0.0.0.0
   ip pim sparse-mode
