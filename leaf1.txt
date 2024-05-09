@@ -43,8 +43,8 @@ feature lldp
 feature vtp
 feature nv overlay
 
-clock timezone ROME 1 0
-clock summer-time ROME 5 Sun Mar 02:00 5 Sun Oct 03:00 60
+clock timezone CET 1 0
+clock summer-time CEST 5 Sun Mar 02:00 5 Sun Oct 03:00 60
 
 username admin password 5 $5$XXXXXXX$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  role network-admin
 ssh key rsa 2048 
